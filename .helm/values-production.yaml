@@ -1,0 +1,65 @@
+replicas: 1
+
+healthcheckPath: /health
+
+imagePullSecret: regcred
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8000
+
+pod:
+  readinessProbe:
+    initialDelaySeconds: 0
+    failureThreshold: 30
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+  livenessProbe:
+    initialDelaySeconds: 90
+    failureThreshold: 3
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+
+resources:
+  limits:
+    memory: 2048Mi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  tls:
+    - hosts:
+        - webhook.95.174.89.98.sslip.io
+      secretName: users-api-tls
+  hosts:
+    - host: webhook.95.174.89.98.sslip.io
+      paths:
+        - path: /
+          pathType: Prefix
+
+preHook:
+  enabled: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  command:
+    - alembic
+  args:
+    - upgrade
+    - head
+  workingDir: "/app/database_migrations"
+  config:
+    enabled: false
+
+config:
+  enabled: true
+  mountPath: "/app/.env"
+  subPath: ".env"
+  value: ""

@@ -1,0 +1,12 @@
+# Ignore everything
+**
+
+# Allow only these directories
+!app
+!database_migrations
+!shared_models
+
+# Allow only these files
+!pyproject.toml
+!README.md
+!uv.lock

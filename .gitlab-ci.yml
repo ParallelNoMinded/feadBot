@@ -1,0 +1,73 @@
+stages:
+  - verification
+  - build
+  - deploy
+
+verification:
+  image: python:3.13
+  stage: verification
+  script:
+    - pip install uv
+    - uv sync
+    - uv run ruff format --line-length 120
+    - uv run ruff check
+  only:
+    - merge_requests
+
+include:
+  - component: $CI_SERVER_FQDN/ai-labs-infrastructure/cicd-components/external/secret-detection/secret-detection@2.0.0
+    inputs:
+      stage: verification
+  - component: $CI_SERVER_FQDN/ai-labs-infrastructure/cicd-components/containers/docker-build@v0.0.4
+    inputs:
+      build_extra_args: ""
+      registry_url: $HARBOR_HOST
+      registry_user: $HARBOR_USERNAME
+      registry_password: $HARBOR_PASSWORD
+      image_name: ${HARBOR_PROJECT}/${CI_PROJECT_NAME}-dev
+      environment_name: Development
+      image_tag: latest
+      job_name: build-dev
+      rules:
+        - if: $CI_COMMIT_BRANCH == "main"
+  - component: $CI_SERVER_FQDN/ai-labs-infrastructure/cicd-components/helm/helm-upgrade@v0.0.7
+    inputs:
+      helm_release_name: ${CI_PROJECT_NAME}
+      namespace: alean-bot-dev
+      kubeconfig: $KUBECONFIG
+      registry_url: $HARBOR_HOST
+      image_name: ${HARBOR_PROJECT}/${CI_PROJECT_NAME}-dev
+      image_tag: latest
+      job_name: deploy-dev
+      values_path: .helm/values-development.yaml
+      helm_chart_version: "^4.0.0"
+      rules:
+        - if: $CI_COMMIT_BRANCH == "main"
+      helm_extra_args: --set-file config.value=${ENV_FILE} --values ${DB_MIGRATIONS_ENV_FILE}
+  - component: $CI_SERVER_FQDN/ai-labs-infrastructure/cicd-components/containers/docker-build@v0.0.4
+    inputs:
+      build_extra_args: ""
+      registry_url: $REGISTRY_URL
+      registry_user: $REGISTRY_USER
+      registry_password: $REGISTRY_PASSWORD
+      image_name: ${CI_PROJECT_NAME}-prod
+      environment_name: Production
+      image_tag: $CI_COMMIT_BRANCH
+      job_name: build-prod
+      rules:
+        - if: $CI_COMMIT_BRANCH =~ /^release-.*$/
+  - component: $CI_SERVER_FQDN/ai-labs-infrastructure/cicd-components/helm/helm-upgrade@v0.0.7
+    inputs:
+      helm_release_name: ${CI_PROJECT_NAME}
+      namespace: prod-feedback-bot
+      kubeconfig: $KUBECONFIG
+      registry_url: $REGISTRY_URL
+      image_name: ${CI_PROJECT_NAME}-prod
+      environment_name: Production
+      image_tag: $CI_COMMIT_BRANCH
+      job_name: deploy-prod
+      values_path: .helm/values-production.yaml
+      helm_chart_version: "^4.0.0"
+      rules:
+        - if: $CI_COMMIT_BRANCH =~ /^release-.*$/
+      helm_extra_args: --set-file config.value=${ENV_FILE} --values ${DB_MIGRATIONS_ENV_FILE}
